@@ -1,0 +1,1435 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+<title>WEMS 代理输赢报表系统（原型 Demo）</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<style>
+  body { margin: 0; background: #f8fafc; }
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel" data-presets="react">
+const { useState, useMemo, useEffect, useRef } = React;
+
+
+// ---------------------------------------------------------------------------
+// 轻量图标组件（用 Emoji 替代 lucide-react，纯浏览器环境无需打包工具）
+// ---------------------------------------------------------------------------
+function makeIcon(glyph) {
+  return function IconComp({ size = 16, className = "", style = {} }) {
+    return (
+      <span
+        className={className}
+        style={{ fontSize: size, lineHeight: 1, display: "inline-block", ...style }}
+      >
+        {glyph}
+      </span>
+    );
+  };
+}
+const LayoutDashboard = makeIcon("\u25A6");
+const PlusCircle = makeIcon("\u2795");
+const List = makeIcon("\u2261");
+const Users = makeIcon("\uD83D\uDC65");
+const BarChart3 = makeIcon("\uD83D\uDCCA");
+const Wallet = makeIcon("\uD83D\uDCB0");
+const Shield = makeIcon("\uD83D\uDEE1");
+const LogOut = makeIcon("\u238B");
+const Search = makeIcon("\uD83D\uDD0D");
+const ChevronRight = makeIcon("\u203A");
+const Edit2 = makeIcon("\u270E");
+const Trash2 = makeIcon("\uD83D\uDDD1");
+const X = makeIcon("\u2715");
+const Eye = makeIcon("\uD83D\uDC41");
+const EyeOff = makeIcon("\uD83D\uDEAB");
+const TrendingUp = makeIcon("\u2191");
+const TrendingDown = makeIcon("\u2193");
+const Menu = makeIcon("\u2630");
+const ArrowLeft = makeIcon("\u2190");
+const Check = makeIcon("\u2713");
+
+
+// ---------------------------------------------------------------------------
+// 工具函数
+// ---------------------------------------------------------------------------
+const fmt = (n) =>
+  "RM " + Number(n || 0).toLocaleString("en-MY", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+const todayStr = () => new Date().toISOString().slice(0, 10);
+const nowTime = () => new Date().toTimeString().slice(0, 5);
+
+const uid = (() => {
+  let n = 1000;
+  return (prefix) => `${prefix}${++n}`;
+})();
+
+const daysAgo = (n) => {
+  const d = new Date();
+  d.setDate(d.getDate() - n);
+  return d.toISOString().slice(0, 10);
+};
+
+const PAYMENT_METHODS = ["银行转账", "现金", "线上钱包", "其他"];
+const EXPENSE_CATEGORIES = ["工资", "广告", "佣金", "交通", "餐饮", "办公", "电话卡", "银行费用", "系统费用", "其他"];
+const PLAYER_STATUS = ["正常", "暂停", "黑名单", "已关闭"];
+
+// ---------------------------------------------------------------------------
+// 模拟种子数据
+// ---------------------------------------------------------------------------
+const SEED_AGENTS = [
+  { id: "A1", name: "阿明", username: "agent_aming", phone: "012-3456789", status: "正常", createdAt: daysAgo(120) },
+  { id: "A2", name: "小华", username: "agent_xiaohua", phone: "013-9988776", status: "正常", createdAt: daysAgo(90) },
+  { id: "A3", name: "大姐", username: "agent_dajie", phone: "016-2221100", status: "正常", createdAt: daysAgo(60) },
+];
+
+const SEED_PLAYERS = [
+  { id: "P1", code: "PL-0001", name: "陈伟", phone: "011-2233445", agentId: "A1", bankName: "Maybank", bankAccount: "1122334455", status: "正常", remark: "", agentVisible: true, createdAt: daysAgo(100) },
+  { id: "P2", code: "PL-0002", name: "李美", phone: "012-9988112", agentId: "A1", bankName: "CIMB", bankAccount: "7766554433", status: "正常", remark: "", agentVisible: true, createdAt: daysAgo(80) },
+  { id: "P3", code: "PL-0003", name: "王强", phone: "017-4455667", agentId: "A1", bankName: "Public Bank", bankAccount: "9988001122", status: "暂停", remark: "近期少玩", agentVisible: false, createdAt: daysAgo(70) },
+  { id: "P4", code: "PL-0004", name: "张丽", phone: "014-1122334", agentId: "A2", bankName: "Maybank", bankAccount: "3344556677", status: "正常", remark: "", agentVisible: true, createdAt: daysAgo(60) },
+  { id: "P5", code: "PL-0005", name: "刘伟", phone: "018-9900112", agentId: "A2", bankName: "RHB", bankAccount: "5566778899", status: "正常", remark: "", agentVisible: true, createdAt: daysAgo(50) },
+  { id: "P6", code: "PL-0006", name: "黄芳", phone: "019-2233556", agentId: "A3", bankName: "Hong Leong", bankAccount: "6677889900", status: "正常", remark: "", agentVisible: true, createdAt: daysAgo(40) },
+  { id: "P7", code: "PL-0007", name: "周杰", phone: "010-5566778", agentId: "A3", bankName: "Maybank", bankAccount: "2233445566", status: "黑名单", remark: "拖欠", agentVisible: true, createdAt: daysAgo(30) },
+];
+
+function seedTransactions() {
+  const list = [];
+  const perAgent = { A1: ["P1", "P2", "P3"], A2: ["P4", "P5"], A3: ["P6", "P7"] };
+  for (let d = 6; d >= 0; d--) {
+    const date = daysAgo(d);
+    Object.entries(perAgent).forEach(([agentId, players]) => {
+      const count = 1 + Math.floor(Math.random() * 2);
+      for (let i = 0; i < count; i++) {
+        const pid = players[Math.floor(Math.random() * players.length)];
+        const inAmt = Math.round((300 + Math.random() * 2000) / 10) * 10;
+        const outAmt = Math.round((inAmt * (0.3 + Math.random() * 0.6)) / 10) * 10;
+        const foc = Math.round((Math.random() * 60) / 5) * 5;
+        list.push({
+          id: uid("T"),
+          date,
+          time: `${String(10 + Math.floor(Math.random() * 10)).padStart(2, "0")}:${String(Math.floor(Math.random() * 60)).padStart(2, "0")}`,
+          agentId,
+          playerId: pid,
+          inAmount: inAmt,
+          outAmount: outAmt,
+          foc,
+          bank: PAYMENT_METHODS[Math.floor(Math.random() * PAYMENT_METHODS.length)],
+          remark: "",
+          agentVisible: true,
+          createdBy: agentId,
+          createdAt: `${date} ${nowTime()}`,
+        });
+      }
+    });
+  }
+  return list;
+}
+
+function seedExpenses() {
+  return [
+    { id: uid("E"), date: todayStr(), category: "广告", item: "Facebook 推广", payee: "Meta Ads", paymentMethod: "银行转账", amount: 350, remark: "", createdBy: "老板", createdAt: `${todayStr()} 09:10` },
+    { id: uid("E"), date: todayStr(), category: "办公", item: "打印纸 & 文具", payee: "文具行", paymentMethod: "现金", amount: 45.5, remark: "", createdBy: "老板", createdAt: `${todayStr()} 10:20` },
+    { id: uid("E"), date: daysAgo(1), category: "工资", item: "代理阿明底薪", payee: "阿明", paymentMethod: "银行转账", amount: 1200, remark: "", createdBy: "老板", createdAt: `${daysAgo(1)} 18:00` },
+  ];
+}
+
+// ---------------------------------------------------------------------------
+// 通用小组件
+// ---------------------------------------------------------------------------
+function NetAmount({ value, size = "base" }) {
+  const positive = value >= 0;
+  const sizeCls = size === "lg" ? "text-2xl" : size === "sm" ? "text-sm" : "text-base";
+  return (
+    <span className={`font-mono font-bold ${sizeCls} ${positive ? "text-green-600" : "text-red-600"}`}>
+      {positive ? "+" : ""}{fmt(value)}
+    </span>
+  );
+}
+
+function StatCard({ label, value, tone = "slate", icon: Icon, sub }) {
+  const toneMap = {
+    slate: "bg-slate-50 text-slate-700 border-slate-200",
+    green: "bg-green-50 text-green-700 border-green-200",
+    red: "bg-red-50 text-red-700 border-red-200",
+    orange: "bg-orange-50 text-orange-700 border-orange-200",
+    emerald: "bg-emerald-50 text-emerald-700 border-emerald-200",
+    sky: "bg-sky-50 text-sky-700 border-sky-200",
+  };
+  return (
+    <div className={`rounded-2xl border p-4 flex flex-col gap-1 ${toneMap[tone]}`}>
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-medium opacity-80">{label}</span>
+        {Icon ? <Icon size={16} className="opacity-70" /> : null}
+      </div>
+      <div className="text-xl font-mono font-bold leading-tight">{value}</div>
+      {sub ? <div className="text-xs opacity-70">{sub}</div> : null}
+    </div>
+  );
+}
+
+function Badge({ children, tone = "slate" }) {
+  const toneMap = {
+    slate: "bg-slate-100 text-slate-600",
+    green: "bg-green-100 text-green-700",
+    red: "bg-red-100 text-red-700",
+    orange: "bg-orange-100 text-orange-700",
+    amber: "bg-amber-100 text-amber-700",
+  };
+  return <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${toneMap[tone]}`}>{children}</span>;
+}
+
+function Modal({ title, onClose, children, wide }) {
+  return (
+    <div className="fixed inset-0 bg-slate-900/40 flex items-end sm:items-center justify-center z-50 p-0 sm:p-4">
+      <div className={`bg-white rounded-t-2xl sm:rounded-2xl w-full ${wide ? "sm:max-w-2xl" : "sm:max-w-md"} max-h-[92vh] overflow-y-auto`}>
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 sticky top-0 bg-white z-10">
+          <h3 className="font-bold text-slate-800">{title}</h3>
+          <button onClick={onClose} className="p-1.5 rounded-full hover:bg-slate-100">
+            <X size={18} />
+          </button>
+        </div>
+        <div className="p-5">{children}</div>
+      </div>
+    </div>
+  );
+}
+
+function Toast({ message }) {
+  if (!message) return null;
+  return (
+    <div className="fixed top-4 left-1/2 -translate-x-1/2 bg-slate-900 text-white text-sm px-4 py-2.5 rounded-full shadow-lg z-[60] flex items-center gap-2 animate-[fadeIn_.2s]">
+      <Check size={15} className="text-emerald-400" /> {message}
+    </div>
+  );
+}
+
+function Field({ label, children }) {
+  return (
+    <label className="block mb-3.5">
+      <span className="block text-xs font-semibold text-slate-500 mb-1.5">{label}</span>
+      {children}
+    </label>
+  );
+}
+
+const inputCls =
+  "w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500";
+
+// 可搜索的玩家下拉选择（按姓名 / 玩家编号 / 电话搜索）
+function PlayerSearchSelect({ players, value, onChange, placeholder = "请选择玩家" }) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const boxRef = React.useRef(null);
+
+  const selected = players.find((p) => p.id === value);
+
+  React.useEffect(() => {
+    const onClickOutside = (e) => {
+      if (boxRef.current && !boxRef.current.contains(e.target)) setOpen(false);
+    };
+    document.addEventListener("mousedown", onClickOutside);
+    return () => document.removeEventListener("mousedown", onClickOutside);
+  }, []);
+
+  const filtered = players.filter((p) => {
+    const q = query.trim().toLowerCase();
+    if (!q) return true;
+    return (
+      p.name.toLowerCase().includes(q) ||
+      p.code.toLowerCase().includes(q) ||
+      (p.phone || "").toLowerCase().includes(q)
+    );
+  });
+
+  return (
+    <div className="relative" ref={boxRef}>
+      <button
+        type="button"
+        onClick={() => { setOpen((o) => !o); setQuery(""); }}
+        className={inputCls + " flex items-center justify-between text-left"}
+      >
+        <span className={selected ? "text-slate-800" : "text-slate-400"}>
+          {selected ? `${selected.name}（${selected.code}）` : placeholder}
+        </span>
+        <ChevronRight size={14} className={`text-slate-400 transition-transform ${open ? "rotate-90" : ""}`} />
+      </button>
+
+      {open && (
+        <div className="absolute z-40 mt-1.5 w-full bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden">
+          <div className="p-2 border-b border-slate-100">
+            <div className="relative">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                autoFocus
+                className={inputCls + " pl-9 py-2"}
+                placeholder="搜索玩家姓名 / 编号 / 电话"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+              />
+            </div>
+          </div>
+          <div className="max-h-56 overflow-y-auto">
+            <button
+              type="button"
+              onClick={() => { onChange(""); setOpen(false); }}
+              className={`w-full text-left px-3.5 py-2.5 text-sm ${!value ? "bg-emerald-50 text-emerald-700 font-medium" : "text-slate-500 hover:bg-slate-50"}`}
+            >
+              请选择玩家
+            </button>
+            {filtered.map((p) => (
+              <button
+                type="button"
+                key={p.id}
+                onClick={() => { onChange(p.id); setOpen(false); }}
+                className={`w-full text-left px-3.5 py-2.5 text-sm flex items-center justify-between ${p.id === value ? "bg-emerald-50 text-emerald-700 font-medium" : "text-slate-700 hover:bg-slate-50"}`}
+              >
+                <span>{p.name} <span className="text-slate-400 font-mono text-xs">（{p.code}）</span></span>
+                {p.id === value && <Check size={14} />}
+              </button>
+            ))}
+            {filtered.length === 0 && (
+              <div className="px-3.5 py-6 text-center text-xs text-slate-400">没有找到符合的玩家</div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// 主程序
+// ---------------------------------------------------------------------------
+function App() {
+  const [agents, setAgents] = useState(SEED_AGENTS);
+  const [players, setPlayers] = useState(SEED_PLAYERS);
+  const [transactions, setTransactions] = useState(seedTransactions);
+  const [expenses, setExpenses] = useState(seedExpenses);
+
+  const [user, setUser] = useState(null); // { role, agentId, name }
+  const [view, setView] = useState("dashboard");
+  const [toast, setToast] = useState("");
+  const [navOpen, setNavOpen] = useState(false);
+  const [drillAgent, setDrillAgent] = useState(null);
+
+  const flash = (msg) => {
+    setToast(msg);
+    setTimeout(() => setToast(""), 1800);
+  };
+
+  // ---- 权限过滤 -----------------------------------------------------------
+  const visiblePlayers = useMemo(() => {
+    if (!user) return [];
+    if (user.role === "boss") return players;
+    return players.filter((p) => p.agentId === user.agentId && p.agentVisible);
+  }, [players, user]);
+
+  const visibleTransactions = useMemo(() => {
+    if (!user) return [];
+    if (user.role === "boss") return transactions;
+    return transactions.filter((t) => t.agentId === user.agentId && t.agentVisible);
+  }, [transactions, user]);
+
+  const netOf = (t) => Number(t.inAmount || 0) - Number(t.outAmount || 0) - Number(t.foc || 0);
+
+  if (!user) {
+    return <LoginScreen agents={agents} onLogin={setUser} />;
+  }
+
+  const NAV_ITEMS = [
+    { key: "dashboard", label: "总览", icon: LayoutDashboard },
+    { key: "entry", label: "记一笔", icon: PlusCircle },
+    { key: "transactions", label: "流水", icon: List },
+    { key: "players", label: "玩家", icon: Users },
+    ...(user.role === "boss" ? [{ key: "agentReport", label: "代理报表", icon: BarChart3 }] : []),
+    ...(user.role === "boss" ? [{ key: "expenses", label: "开销", icon: Wallet }] : []),
+    ...(user.role === "boss" ? [{ key: "permissions", label: "权限", icon: Shield }] : []),
+  ];
+
+  const ctx = {
+    agents, players, transactions, expenses,
+    setAgents, setPlayers, setTransactions, setExpenses,
+    user, flash, netOf, visiblePlayers, visibleTransactions,
+    setView, drillAgent, setDrillAgent,
+  };
+
+  return (
+    <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col sm:flex-row" style={{ fontFamily: "system-ui, -apple-system, sans-serif" }}>
+      <Toast message={toast} />
+
+      {/* 桌面侧边栏 */}
+      <aside className="hidden sm:flex sm:w-56 flex-col bg-white border-r border-slate-100 shrink-0">
+        <div className="px-5 py-5 border-b border-slate-100">
+          <div className="font-mono font-extrabold text-lg text-emerald-700 tracking-tight">WEMS</div>
+          <div className="text-xs text-slate-400 mt-0.5">代理输赢报表系统</div>
+        </div>
+        <nav className="flex-1 py-3">
+          {NAV_ITEMS.map((item) => (
+            <button
+              key={item.key}
+              onClick={() => { setView(item.key); setDrillAgent(null); }}
+              className={`w-full flex items-center gap-3 px-5 py-2.5 text-sm font-medium ${
+                view === item.key ? "bg-emerald-50 text-emerald-700 border-r-2 border-emerald-600" : "text-slate-500 hover:bg-slate-50"
+              }`}
+            >
+              <item.icon size={17} /> {item.label}
+            </button>
+          ))}
+        </nav>
+        <div className="px-5 py-4 border-t border-slate-100">
+          <div className="text-xs text-slate-400 mb-1">当前登录</div>
+          <div className="text-sm font-semibold">{user.name}</div>
+          <button onClick={() => setUser(null)} className="mt-2 flex items-center gap-1.5 text-xs text-slate-400 hover:text-red-500">
+            <LogOut size={13} /> 退出登录
+          </button>
+        </div>
+      </aside>
+
+      {/* 移动端顶部条 */}
+      <div className="sm:hidden flex items-center justify-between px-4 py-3 bg-white border-b border-slate-100 sticky top-0 z-30">
+        <div className="font-mono font-extrabold text-emerald-700">WEMS</div>
+        <div className="flex items-center gap-3">
+          <span className="text-xs text-slate-500">{user.name}</span>
+          <button onClick={() => setUser(null)} className="p-1.5 rounded-full bg-slate-100">
+            <LogOut size={15} />
+          </button>
+        </div>
+      </div>
+
+      {/* 主内容 */}
+      <main className="flex-1 min-w-0 pb-20 sm:pb-6">
+        <div className="max-w-5xl mx-auto p-4 sm:p-6">
+          {view === "dashboard" && <Dashboard {...ctx} />}
+          {view === "entry" && <EntryForm {...ctx} />}
+          {view === "transactions" && <TransactionList {...ctx} />}
+          {view === "players" && <PlayerManagement {...ctx} />}
+          {view === "agentReport" && user.role === "boss" && <AgentReport {...ctx} />}
+          {view === "expenses" && user.role === "boss" && <Expenses {...ctx} />}
+          {view === "permissions" && user.role === "boss" && <Permissions {...ctx} />}
+        </div>
+      </main>
+
+      {/* 移动端底部导航 */}
+      <nav className="sm:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-slate-100 flex z-30">
+        {NAV_ITEMS.slice(0, 5).map((item) => (
+          <button
+            key={item.key}
+            onClick={() => { setView(item.key); setDrillAgent(null); }}
+            className={`flex-1 flex flex-col items-center gap-0.5 py-2.5 text-[10px] font-medium ${
+              view === item.key ? "text-emerald-600" : "text-slate-400"
+            }`}
+          >
+            <item.icon size={19} /> {item.label}
+          </button>
+        ))}
+      </nav>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// 登录页
+// ---------------------------------------------------------------------------
+function LoginScreen({ agents, onLogin }) {
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+
+  const accounts = [
+    { username: "boss", password: "boss123", role: "boss", name: "老板" },
+    ...agents.map((a) => ({ username: a.username, password: "agent123", role: "agent", name: a.name, agentId: a.id })),
+  ];
+
+  const tryLogin = (u, p) => {
+    const found = accounts.find((a) => a.username === u && a.password === p);
+    if (!found) {
+      setError("账号或密码不正确，请重新输入");
+      return;
+    }
+    setError("");
+    onLogin(found);
+  };
+
+  return (
+    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-5">
+      <div className="w-full max-w-sm">
+        <div className="text-center mb-7">
+          <div className="font-mono font-extrabold text-3xl text-emerald-700 tracking-tight">WEMS</div>
+          <div className="text-sm text-slate-400 mt-1">代理输赢报表系统</div>
+        </div>
+
+        <div className="bg-white rounded-2xl border border-slate-100 p-6 shadow-sm">
+          <Field label="登录账号">
+            <input className={inputCls} value={username} onChange={(e) => setUsername(e.target.value)} placeholder="请输入账号" />
+          </Field>
+          <Field label="密码">
+            <input type="password" className={inputCls} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="请输入密码" />
+          </Field>
+          {error ? <div className="text-red-500 text-xs mb-3 -mt-1">{error}</div> : null}
+          <button
+            onClick={() => tryLogin(username, password)}
+            className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-3 rounded-xl text-sm"
+          >
+            登录
+          </button>
+        </div>
+
+        <div className="mt-5 bg-white rounded-2xl border border-slate-100 p-4">
+          <div className="text-xs font-semibold text-slate-400 mb-2.5">演示快速登录（原型专用）</div>
+          <div className="grid grid-cols-2 gap-2">
+            <button onClick={() => tryLogin("boss", "boss123")} className="col-span-2 text-sm font-semibold bg-slate-800 text-white rounded-xl py-2.5">
+              👑 老板登录
+            </button>
+            {agents.map((a) => (
+              <button
+                key={a.id}
+                onClick={() => tryLogin(a.username, "agent123")}
+                className="text-sm font-medium bg-slate-100 text-slate-700 rounded-xl py-2.5"
+              >
+                {a.name}（代理）
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// 每日总览 Dashboard
+// ---------------------------------------------------------------------------
+function Dashboard({ agents, transactions, expenses, user, netOf, visibleTransactions, setView }) {
+  const [date, setDate] = useState(todayStr());
+
+  const dayTx = useMemo(() => visibleTransactions.filter((t) => t.date === date), [visibleTransactions, date]);
+  const dayExpenses = useMemo(() => expenses.filter((e) => e.date === date), [expenses, date]);
+
+  const totals = useMemo(() => {
+    const inSum = dayTx.reduce((s, t) => s + Number(t.inAmount), 0);
+    const outSum = dayTx.reduce((s, t) => s + Number(t.outAmount), 0);
+    const focSum = dayTx.reduce((s, t) => s + Number(t.foc), 0);
+    const netSum = dayTx.reduce((s, t) => s + netOf(t), 0);
+    const expSum = dayExpenses.reduce((s, e) => s + Number(e.amount), 0);
+    const playerCount = new Set(dayTx.map((t) => t.playerId)).size;
+    return { inSum, outSum, focSum, netSum, expSum, playerCount, txCount: dayTx.length, companyNet: netSum - expSum };
+  }, [dayTx, dayExpenses]);
+
+  const perAgent = useMemo(() => {
+    if (user.role !== "boss") return [];
+    return agents.map((a) => {
+      const list = dayTx.filter((t) => t.agentId === a.id);
+      const net = list.reduce((s, t) => s + netOf(t), 0);
+      return { agent: a, net, count: list.length, players: new Set(list.map((t) => t.playerId)).size };
+    });
+  }, [agents, dayTx]);
+
+  const trend = useMemo(() => {
+    const out = [];
+    for (let d = 6; d >= 0; d--) {
+      const day = daysAgo(d);
+      const list = visibleTransactions.filter((t) => t.date === day);
+      out.push({ day, net: list.reduce((s, t) => s + netOf(t), 0) });
+    }
+    return out;
+  }, [visibleTransactions]);
+
+  const maxAbs = Math.max(1, ...trend.map((d) => Math.abs(d.net)));
+  const recent = [...dayTx].sort((a, b) => (a.time < b.time ? 1 : -1)).slice(0, 6);
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <h1 className="text-lg font-bold text-slate-800">
+          {user.role === "boss" ? "公司每日总览" : `${user.name} 的每日总览`}
+        </h1>
+        <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className={inputCls + " max-w-[170px]"} />
+      </div>
+
+      {/* 顶部账单式总结条 */}
+      <div className="bg-white rounded-2xl border border-slate-100 p-5">
+        <div className="grid grid-cols-2 sm:grid-cols-4 divide-x divide-y sm:divide-y-0 divide-slate-100">
+          <SummaryCell label="进款" value={fmt(totals.inSum)} tone="slate" />
+          <SummaryCell label="赢款" value={fmt(totals.outSum)} tone="slate" />
+          <SummaryCell label="FOC" value={fmt(totals.focSum)} tone="orange" />
+          <SummaryCell label={user.role === "boss" ? "全部代理净输赢" : "我的净输赢"} value={totals.netSum} isNet tone="net" />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <StatCard label="玩家数量" value={totals.playerCount} tone="sky" icon={Users} />
+        <StatCard label="账目数量" value={totals.txCount} tone="slate" icon={List} />
+        {user.role === "boss" && <StatCard label="老板开销" value={fmt(totals.expSum)} tone="orange" icon={Wallet} />}
+        {user.role === "boss" && (
+          <StatCard
+            label="公司净结果"
+            value={(totals.companyNet >= 0 ? "+" : "") + fmt(totals.companyNet)}
+            tone={totals.companyNet >= 0 ? "green" : "red"}
+            icon={totals.companyNet >= 0 ? TrendingUp : TrendingDown}
+            sub={totals.companyNet >= 0 ? "公司赢" : "公司输"}
+          />
+        )}
+      </div>
+
+      {/* 快捷按钮 */}
+      <div>
+        <div className="text-xs font-semibold text-slate-400 mb-2">快捷操作</div>
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
+          <QuickBtn label="快速记一笔" icon={PlusCircle} onClick={() => setView("entry")} />
+          <QuickBtn label="新增玩家" icon={Users} onClick={() => setView("players")} />
+          <QuickBtn label="查看流水" icon={List} onClick={() => setView("transactions")} />
+          {user.role === "boss" && <QuickBtn label="代理输赢" icon={BarChart3} onClick={() => setView("agentReport")} />}
+          {user.role === "boss" && <QuickBtn label="记录开销" icon={Wallet} onClick={() => setView("expenses")} />}
+        </div>
+      </div>
+
+      {/* 代理汇总（老板） */}
+      {user.role === "boss" && (
+        <div className="bg-white rounded-2xl border border-slate-100 overflow-hidden">
+          <div className="px-4 py-3 border-b border-slate-100 font-semibold text-sm text-slate-700">各代理今日汇总</div>
+          <div className="divide-y divide-slate-100">
+            {perAgent.map((row) => (
+              <div key={row.agent.id} className="flex items-center justify-between px-4 py-3">
+                <div>
+                  <div className="text-sm font-medium text-slate-800">{row.agent.name}</div>
+                  <div className="text-xs text-slate-400">{row.players} 位玩家 · {row.count} 笔</div>
+                </div>
+                <NetAmount value={row.net} />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* 7天趋势 */}
+      <div className="bg-white rounded-2xl border border-slate-100 p-4">
+        <div className="font-semibold text-sm text-slate-700 mb-4">最近 7 天输赢趋势</div>
+        <div className="flex items-end justify-between gap-2 h-28">
+          {trend.map((d) => {
+            const h = Math.max(4, (Math.abs(d.net) / maxAbs) * 90);
+            return (
+              <div key={d.day} className="flex-1 flex flex-col items-center justify-end gap-1">
+                <div
+                  className={`w-full rounded-md ${d.net >= 0 ? "bg-green-400" : "bg-red-400"}`}
+                  style={{ height: `${h}px` }}
+                  title={fmt(d.net)}
+                />
+                <span className="text-[9px] text-slate-400">{d.day.slice(5)}</span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* 最近账目 */}
+      <div className="bg-white rounded-2xl border border-slate-100 overflow-hidden">
+        <div className="px-4 py-3 border-b border-slate-100 font-semibold text-sm text-slate-700">当天最近账目</div>
+        {recent.length === 0 ? (
+          <div className="px-4 py-8 text-center text-sm text-slate-400">今天还没有记录，点击「快速记一笔」开始</div>
+        ) : (
+          <div className="divide-y divide-slate-100">
+            {recent.map((t) => (
+              <div key={t.id} className="flex items-center justify-between px-4 py-3 text-sm">
+                <div>
+                  <span className="text-slate-700 font-medium">{t.time}</span>
+                  <span className="text-slate-400 ml-2">进 {fmt(t.inAmount)} · 赢 {fmt(t.outAmount)}</span>
+                </div>
+                <NetAmount value={netOf(t)} size="sm" />
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function SummaryCell({ label, value, isNet, tone }) {
+  return (
+    <div className="px-3 py-3 sm:py-1 flex flex-col gap-1">
+      <span className="text-[11px] text-slate-400 font-medium">{label}</span>
+      {isNet ? (
+        <NetAmount value={value} size="lg" />
+      ) : (
+        <span className={`font-mono font-bold text-lg ${tone === "orange" ? "text-orange-600" : "text-slate-800"}`}>{value}</span>
+      )}
+    </div>
+  );
+}
+
+function QuickBtn({ label, icon: Icon, onClick }) {
+  return (
+    <button onClick={onClick} className="flex flex-col items-center gap-1.5 bg-white border border-slate-100 rounded-2xl py-4 hover:border-emerald-300 hover:bg-emerald-50/50">
+      <Icon size={20} className="text-emerald-600" />
+      <span className="text-xs font-medium text-slate-600">{label}</span>
+    </button>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// 玩家进出款录入
+// ---------------------------------------------------------------------------
+function EntryForm({ agents, players, setTransactions, user, flash, netOf }) {
+  const blank = () => ({
+    date: todayStr(),
+    time: nowTime(),
+    agentId: user.role === "agent" ? user.agentId : agents[0]?.id || "",
+    playerId: "",
+    inAmount: 0,
+    outAmount: 0,
+    foc: 0,
+    bank: PAYMENT_METHODS[0],
+    remark: "",
+    agentVisible: true,
+  });
+  const [form, setForm] = useState(blank());
+
+  const agentPlayers = players.filter((p) => p.agentId === form.agentId);
+  const net = Number(form.inAmount || 0) - Number(form.outAmount || 0) - Number(form.foc || 0);
+
+  const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+
+  const save = (keepGoing) => {
+    if (!form.agentId || !form.playerId) {
+      flash("请先选择代理和玩家");
+      return;
+    }
+    const record = { ...form, id: uid("T"), createdBy: user.role === "boss" ? "老板" : user.name, createdAt: `${form.date} ${form.time}` };
+    setTransactions((list) => [record, ...list]);
+    flash("保存成功");
+    if (keepGoing) {
+      setForm({ ...blank(), agentId: form.agentId });
+    } else {
+      setForm(blank());
+    }
+  };
+
+  return (
+    <div className="max-w-lg space-y-5">
+      <h1 className="text-lg font-bold text-slate-800">玩家进出款录入</h1>
+
+      <div className="bg-white rounded-2xl border border-slate-100 p-5">
+        <div className="grid grid-cols-2 gap-x-3">
+          <Field label="日期">
+            <input type="date" className={inputCls} value={form.date} onChange={(e) => set("date", e.target.value)} />
+          </Field>
+          <Field label="时间">
+            <input type="time" className={inputCls} value={form.time} onChange={(e) => set("time", e.target.value)} />
+          </Field>
+        </div>
+
+        <Field label="代理">
+          {user.role === "boss" ? (
+            <select className={inputCls} value={form.agentId} onChange={(e) => { set("agentId", e.target.value); set("playerId", ""); }}>
+              {agents.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+            </select>
+          ) : (
+            <div className={inputCls + " bg-slate-50 text-slate-500"}>{user.name}（当前代理）</div>
+          )}
+        </Field>
+
+        <Field label="玩家">
+          <PlayerSearchSelect players={agentPlayers} value={form.playerId} onChange={(id) => set("playerId", id)} />
+        </Field>
+
+        <div className="grid grid-cols-3 gap-x-3">
+          <Field label="进款 IN">
+            <input type="number" inputMode="decimal" className={inputCls} value={form.inAmount} onChange={(e) => set("inAmount", e.target.value)} />
+          </Field>
+          <Field label="赢款 OUT">
+            <input type="number" inputMode="decimal" className={inputCls} value={form.outAmount} onChange={(e) => set("outAmount", e.target.value)} />
+          </Field>
+          <Field label="FOC">
+            <input type="number" inputMode="decimal" className={inputCls} value={form.foc} onChange={(e) => set("foc", e.target.value)} />
+          </Field>
+        </div>
+
+        <Field label="银行 / 付款方式">
+          <select className={inputCls} value={form.bank} onChange={(e) => set("bank", e.target.value)}>
+            {PAYMENT_METHODS.map((b) => <option key={b}>{b}</option>)}
+          </select>
+        </Field>
+
+        <Field label="备注（选填）">
+          <input className={inputCls} value={form.remark} onChange={(e) => set("remark", e.target.value)} placeholder="备注" />
+        </Field>
+
+        {user.role === "boss" && (
+          <label className="flex items-center gap-2 mb-4 text-sm text-slate-600">
+            <input type="checkbox" checked={form.agentVisible} onChange={(e) => set("agentVisible", e.target.checked)} className="w-4 h-4 accent-emerald-600" />
+            允许代理查看这笔账目
+          </label>
+        )}
+
+        <div className="bg-slate-50 rounded-xl p-4 flex items-center justify-between mb-4">
+          <span className="text-sm font-medium text-slate-500">本单净输赢</span>
+          <NetAmount value={net} size="lg" />
+        </div>
+
+        <div className="grid grid-cols-2 gap-2.5">
+          <button onClick={() => save(false)} className="bg-slate-100 text-slate-700 font-semibold py-3 rounded-xl text-sm">保存</button>
+          <button onClick={() => save(true)} className="bg-emerald-600 text-white font-semibold py-3 rounded-xl text-sm">保存并继续下一笔</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// 玩家流水
+// ---------------------------------------------------------------------------
+function TransactionList({ agents, players, transactions, setTransactions, user, flash, netOf, visibleTransactions }) {
+  const [filters, setFilters] = useState({ start: "", end: "", agentId: "", playerId: "", keyword: "" });
+  const [editing, setEditing] = useState(null);
+  const [confirmDelete, setConfirmDelete] = useState(null);
+
+  const base = user.role === "boss" ? transactions : visibleTransactions;
+
+  const filtered = useMemo(() => {
+    return base.filter((t) => {
+      if (filters.start && t.date < filters.start) return false;
+      if (filters.end && t.date > filters.end) return false;
+      if (filters.agentId && t.agentId !== filters.agentId) return false;
+      if (filters.playerId && t.playerId !== filters.playerId) return false;
+      if (filters.keyword) {
+        const p = players.find((pl) => pl.id === t.playerId);
+        const hay = `${p?.name || ""} ${p?.phone || ""} ${t.bank} ${t.remark}`.toLowerCase();
+        if (!hay.includes(filters.keyword.toLowerCase())) return false;
+      }
+      return true;
+    }).sort((a, b) => (a.date + a.time < b.date + b.time ? 1 : -1));
+  }, [base, filters, players]);
+
+  const totals = useMemo(() => {
+    const inSum = filtered.reduce((s, t) => s + Number(t.inAmount), 0);
+    const outSum = filtered.reduce((s, t) => s + Number(t.outAmount), 0);
+    const focSum = filtered.reduce((s, t) => s + Number(t.foc), 0);
+    const netSum = filtered.reduce((s, t) => s + netOf(t), 0);
+    return { inSum, outSum, focSum, netSum, players: new Set(filtered.map((t) => t.playerId)).size };
+  }, [filtered]);
+
+  const agentName = (id) => agents.find((a) => a.id === id)?.name || "-";
+  const playerName = (id) => players.find((p) => p.id === id)?.name || "-";
+
+  const exportCSV = () => {
+    const header = ["日期", "时间", "代理", "玩家", "进款", "赢款", "FOC", "净输赢", "付款方式", "备注"];
+    const rows = filtered.map((t) => [t.date, t.time, agentName(t.agentId), playerName(t.playerId), t.inAmount, t.outAmount, t.foc, netOf(t), t.bank, t.remark]);
+    const csv = [header, ...rows].map((r) => r.join(",")).join("\n");
+    const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = `玩家流水_${todayStr()}.csv`;
+    link.click();
+    flash("CSV 导出成功（模拟）");
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <h1 className="text-lg font-bold text-slate-800">玩家流水</h1>
+        <button onClick={exportCSV} className="text-xs font-semibold bg-slate-800 text-white px-3.5 py-2 rounded-lg">导出 CSV</button>
+      </div>
+
+      {/* 筛选 */}
+      <div className="bg-white rounded-2xl border border-slate-100 p-4 grid grid-cols-2 sm:grid-cols-5 gap-2.5">
+        <input type="date" className={inputCls} value={filters.start} onChange={(e) => setFilters((f) => ({ ...f, start: e.target.value }))} />
+        <input type="date" className={inputCls} value={filters.end} onChange={(e) => setFilters((f) => ({ ...f, end: e.target.value }))} />
+        {user.role === "boss" && (
+          <select className={inputCls} value={filters.agentId} onChange={(e) => setFilters((f) => ({ ...f, agentId: e.target.value }))}>
+            <option value="">全部代理</option>
+            {agents.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+          </select>
+        )}
+        <div className="relative sm:col-span-2 col-span-2">
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          <input className={inputCls + " pl-9"} placeholder="搜索玩家/银行/备注" value={filters.keyword} onChange={(e) => setFilters((f) => ({ ...f, keyword: e.target.value }))} />
+        </div>
+      </div>
+
+      {/* 汇总条 */}
+      <div className="bg-white rounded-2xl border border-slate-100 p-4 grid grid-cols-3 sm:grid-cols-5 gap-3 text-center">
+        <MiniStat label="进款" value={fmt(totals.inSum)} />
+        <MiniStat label="赢款" value={fmt(totals.outSum)} />
+        <MiniStat label="FOC" value={fmt(totals.focSum)} tone="orange" />
+        <MiniStat label="净输赢" value={<NetAmount value={totals.netSum} />} raw />
+        <MiniStat label="账目数" value={filtered.length} />
+      </div>
+
+      {/* 表格 */}
+      <div className="bg-white rounded-2xl border border-slate-100 overflow-x-auto">
+        <table className="w-full text-sm min-w-[720px]">
+          <thead>
+            <tr className="text-left text-xs text-slate-400 border-b border-slate-100">
+              <th className="px-4 py-3 font-medium">日期/时间</th>
+              {user.role === "boss" && <th className="px-4 py-3 font-medium">代理</th>}
+              <th className="px-4 py-3 font-medium">玩家</th>
+              <th className="px-4 py-3 font-medium">进款</th>
+              <th className="px-4 py-3 font-medium">赢款</th>
+              <th className="px-4 py-3 font-medium">FOC</th>
+              <th className="px-4 py-3 font-medium">净输赢</th>
+              <th className="px-4 py-3 font-medium">付款方式</th>
+              <th className="px-4 py-3 font-medium">操作</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-50">
+            {filtered.map((t) => (
+              <tr key={t.id} className="hover:bg-slate-50/60">
+                <td className="px-4 py-3 whitespace-nowrap text-slate-500">{t.date} {t.time}</td>
+                {user.role === "boss" && <td className="px-4 py-3">{agentName(t.agentId)}</td>}
+                <td className="px-4 py-3 font-medium">{playerName(t.playerId)}</td>
+                <td className="px-4 py-3 font-mono">{fmt(t.inAmount)}</td>
+                <td className="px-4 py-3 font-mono">{fmt(t.outAmount)}</td>
+                <td className="px-4 py-3 font-mono text-orange-600">{fmt(t.foc)}</td>
+                <td className="px-4 py-3"><NetAmount value={netOf(t)} size="sm" /></td>
+                <td className="px-4 py-3 text-slate-500">{t.bank}</td>
+                <td className="px-4 py-3">
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => setEditing(t)} className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200"><Edit2 size={13} /></button>
+                    <button onClick={() => setConfirmDelete(t)} className="p-1.5 rounded-lg bg-red-50 text-red-500 hover:bg-red-100"><Trash2 size={13} /></button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+            {filtered.length === 0 && (
+              <tr><td colSpan={9} className="px-4 py-10 text-center text-slate-400">没有符合条件的记录</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {editing && (
+        <EditTransactionModal
+          tx={editing}
+          agents={agents}
+          players={players}
+          onClose={() => setEditing(null)}
+          onSave={(updated) => {
+            setTransactions((list) => list.map((t) => (t.id === updated.id ? updated : t)));
+            setEditing(null);
+            flash("修改成功，报表已重新计算");
+          }}
+        />
+      )}
+
+      {confirmDelete && (
+        <Modal title="确认删除" onClose={() => setConfirmDelete(null)}>
+          <p className="text-sm text-slate-600 mb-5">
+            确定要删除 <b>{playerName(confirmDelete.playerId)}</b> 在 {confirmDelete.date} {confirmDelete.time} 的这笔账目吗？删除后无法恢复。
+          </p>
+          <div className="grid grid-cols-2 gap-2.5">
+            <button onClick={() => setConfirmDelete(null)} className="bg-slate-100 text-slate-700 font-semibold py-2.5 rounded-xl text-sm">取消</button>
+            <button
+              onClick={() => {
+                setTransactions((list) => list.filter((t) => t.id !== confirmDelete.id));
+                setConfirmDelete(null);
+                flash("已删除，汇总数据已更新");
+              }}
+              className="bg-red-500 text-white font-semibold py-2.5 rounded-xl text-sm"
+            >
+              确认删除
+            </button>
+          </div>
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+function MiniStat({ label, value, tone, raw }) {
+  return (
+    <div>
+      <div className="text-[11px] text-slate-400 mb-1">{label}</div>
+      {raw ? value : <div className={`font-mono font-bold text-sm ${tone === "orange" ? "text-orange-600" : "text-slate-800"}`}>{value}</div>}
+    </div>
+  );
+}
+
+function EditTransactionModal({ tx, agents, players, onClose, onSave }) {
+  const [form, setForm] = useState({ ...tx });
+  const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+  const net = Number(form.inAmount || 0) - Number(form.outAmount || 0) - Number(form.foc || 0);
+  const agentPlayers = players.filter((p) => p.agentId === form.agentId);
+
+  return (
+    <Modal title="修改账目" onClose={onClose}>
+      <div className="grid grid-cols-2 gap-x-3">
+        <Field label="日期"><input type="date" className={inputCls} value={form.date} onChange={(e) => set("date", e.target.value)} /></Field>
+        <Field label="时间"><input type="time" className={inputCls} value={form.time} onChange={(e) => set("time", e.target.value)} /></Field>
+      </div>
+      <Field label="代理">
+        <select className={inputCls} value={form.agentId} onChange={(e) => set("agentId", e.target.value)}>
+          {agents.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+        </select>
+      </Field>
+      <Field label="玩家">
+        <PlayerSearchSelect players={agentPlayers} value={form.playerId} onChange={(id) => set("playerId", id)} />
+      </Field>
+      <div className="grid grid-cols-3 gap-x-3">
+        <Field label="进款"><input type="number" className={inputCls} value={form.inAmount} onChange={(e) => set("inAmount", e.target.value)} /></Field>
+        <Field label="赢款"><input type="number" className={inputCls} value={form.outAmount} onChange={(e) => set("outAmount", e.target.value)} /></Field>
+        <Field label="FOC"><input type="number" className={inputCls} value={form.foc} onChange={(e) => set("foc", e.target.value)} /></Field>
+      </div>
+      <div className="bg-slate-50 rounded-xl p-4 flex items-center justify-between mb-4">
+        <span className="text-sm font-medium text-slate-500">净输赢</span>
+        <NetAmount value={net} />
+      </div>
+      <button onClick={() => onSave(form)} className="w-full bg-emerald-600 text-white font-semibold py-3 rounded-xl text-sm">保存修改</button>
+    </Modal>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// 玩家资料管理
+// ---------------------------------------------------------------------------
+function PlayerManagement({ agents, players, setPlayers, transactions, user, flash, netOf, visiblePlayers }) {
+  const [keyword, setKeyword] = useState("");
+  const [agentFilter, setAgentFilter] = useState("");
+  const [editing, setEditing] = useState(null);
+  const [showAdd, setShowAdd] = useState(false);
+  const [detail, setDetail] = useState(null);
+
+  const base = user.role === "boss" ? players : visiblePlayers;
+  const list = base.filter((p) => {
+    if (agentFilter && p.agentId !== agentFilter) return false;
+    if (keyword) {
+      const hay = `${p.name} ${p.phone} ${p.bankName} ${p.bankAccount}`.toLowerCase();
+      if (!hay.includes(keyword.toLowerCase())) return false;
+    }
+    return true;
+  });
+
+  const agentName = (id) => agents.find((a) => a.id === id)?.name || "-";
+
+  const statTone = { 正常: "green", 暂停: "amber", 黑名单: "red", 已关闭: "slate" };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <h1 className="text-lg font-bold text-slate-800">玩家资料管理</h1>
+        <button onClick={() => setShowAdd(true)} className="text-xs font-semibold bg-emerald-600 text-white px-3.5 py-2 rounded-lg flex items-center gap-1.5">
+          <PlusCircle size={14} /> 新增玩家
+        </button>
+      </div>
+
+      <div className="bg-white rounded-2xl border border-slate-100 p-4 flex flex-col sm:flex-row gap-2.5">
+        <div className="relative flex-1">
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          <input className={inputCls + " pl-9"} placeholder="搜索姓名 / 电话 / 银行" value={keyword} onChange={(e) => setKeyword(e.target.value)} />
+        </div>
+        {user.role === "boss" && (
+          <select className={inputCls + " sm:max-w-[160px]"} value={agentFilter} onChange={(e) => setAgentFilter(e.target.value)}>
+            <option value="">全部代理</option>
+            {agents.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+          </select>
+        )}
+      </div>
+
+      <div className="grid sm:grid-cols-2 gap-3">
+        {list.map((p) => {
+          const txs = transactions.filter((t) => t.playerId === p.id);
+          const net = txs.reduce((s, t) => s + netOf(t), 0);
+          return (
+            <div key={p.id} className="bg-white rounded-2xl border border-slate-100 p-4">
+              <div className="flex items-start justify-between mb-2">
+                <div>
+                  <div className="font-semibold text-slate-800">{p.name}</div>
+                  <div className="text-xs text-slate-400">{p.code} · {p.phone}</div>
+                </div>
+                <Badge tone={statTone[p.status]}>{p.status}</Badge>
+              </div>
+              <div className="text-xs text-slate-500 mb-3">{agentName(p.agentId)} · {p.bankName} {p.bankAccount}</div>
+              <div className="flex items-center justify-between">
+                <div className="text-xs text-slate-400">累计净输赢（{txs.length} 笔）</div>
+                <NetAmount value={net} size="sm" />
+              </div>
+              <div className="flex gap-2 mt-3">
+                <button onClick={() => setDetail(p)} className="flex-1 text-xs font-medium bg-slate-50 text-slate-600 py-2 rounded-lg flex items-center justify-center gap-1">
+                  查看流水 <ChevronRight size={13} />
+                </button>
+                <button onClick={() => setEditing(p)} className="text-xs font-medium bg-slate-50 text-slate-600 px-3 py-2 rounded-lg">
+                  <Edit2 size={13} />
+                </button>
+              </div>
+            </div>
+          );
+        })}
+        {list.length === 0 && <div className="col-span-2 text-center text-sm text-slate-400 py-10">没有符合条件的玩家</div>}
+      </div>
+
+      {(showAdd || editing) && (
+        <PlayerFormModal
+          player={editing}
+          agents={agents}
+          user={user}
+          onClose={() => { setShowAdd(false); setEditing(null); }}
+          onSave={(p) => {
+            if (editing) {
+              setPlayers((list) => list.map((x) => (x.id === p.id ? p : x)));
+              flash("玩家资料已更新");
+            } else {
+              setPlayers((list) => [{ ...p, id: uid("P"), code: `PL-${String(list.length + 1).padStart(4, "0")}`, createdAt: todayStr() }, ...list]);
+              flash("玩家已新增");
+            }
+            setShowAdd(false); setEditing(null);
+          }}
+        />
+      )}
+
+      {detail && (
+        <Modal title={`${detail.name} 的流水`} onClose={() => setDetail(null)} wide>
+          <PlayerHistory player={detail} transactions={transactions.filter((t) => t.playerId === detail.id)} netOf={netOf} />
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+function PlayerFormModal({ player, agents, user, onClose, onSave }) {
+  const [form, setForm] = useState(
+    player || {
+      name: "", phone: "", agentId: user.role === "agent" ? user.agentId : agents[0]?.id || "",
+      bankName: "", bankAccount: "", status: "正常", remark: "", agentVisible: true,
+    }
+  );
+  const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+
+  return (
+    <Modal title={player ? "修改玩家资料" : "新增玩家"} onClose={onClose}>
+      <Field label="玩家姓名"><input className={inputCls} value={form.name} onChange={(e) => set("name", e.target.value)} /></Field>
+      <Field label="电话号码"><input className={inputCls} value={form.phone} onChange={(e) => set("phone", e.target.value)} /></Field>
+      <Field label="所属代理">
+        {user.role === "boss" ? (
+          <select className={inputCls} value={form.agentId} onChange={(e) => set("agentId", e.target.value)}>
+            {agents.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+          </select>
+        ) : <div className={inputCls + " bg-slate-50 text-slate-500"}>{user.name}</div>}
+      </Field>
+      <div className="grid grid-cols-2 gap-x-3">
+        <Field label="银行名称"><input className={inputCls} value={form.bankName} onChange={(e) => set("bankName", e.target.value)} /></Field>
+        <Field label="银行账号"><input className={inputCls} value={form.bankAccount} onChange={(e) => set("bankAccount", e.target.value)} /></Field>
+      </div>
+      <Field label="状态">
+        <select className={inputCls} value={form.status} onChange={(e) => set("status", e.target.value)}>
+          {PLAYER_STATUS.map((s) => <option key={s}>{s}</option>)}
+        </select>
+      </Field>
+      <Field label="备注"><input className={inputCls} value={form.remark} onChange={(e) => set("remark", e.target.value)} /></Field>
+      <button
+        onClick={() => { if (!form.name) return; onSave(form); }}
+        className="w-full bg-emerald-600 text-white font-semibold py-3 rounded-xl text-sm mt-1"
+      >
+        保存
+      </button>
+    </Modal>
+  );
+}
+
+function PlayerHistory({ transactions, netOf }) {
+  const sum = (k) => transactions.reduce((s, t) => s + Number(t[k] || 0), 0);
+  const net = transactions.reduce((s, t) => s + netOf(t), 0);
+  return (
+    <div>
+      <div className="grid grid-cols-4 gap-2 mb-4 text-center">
+        <MiniStat label="累计进款" value={fmt(sum("inAmount"))} />
+        <MiniStat label="累计赢款" value={fmt(sum("outAmount"))} />
+        <MiniStat label="累计FOC" value={fmt(sum("foc"))} tone="orange" />
+        <MiniStat label="累计净输赢" value={<NetAmount value={net} />} raw />
+      </div>
+      <div className="divide-y divide-slate-100 max-h-72 overflow-y-auto">
+        {transactions.sort((a, b) => (a.date + a.time < b.date + b.time ? 1 : -1)).map((t) => (
+          <div key={t.id} className="flex items-center justify-between py-2.5 text-sm">
+            <span className="text-slate-500">{t.date} {t.time}</span>
+            <span className="text-slate-500">进{fmt(t.inAmount)} / 赢{fmt(t.outAmount)}</span>
+            <NetAmount value={netOf(t)} size="sm" />
+          </div>
+        ))}
+        {transactions.length === 0 && <div className="text-center text-sm text-slate-400 py-8">暂无流水记录</div>}
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// 代理输赢报表（老板专用）
+// ---------------------------------------------------------------------------
+function AgentReport({ agents, players, transactions, netOf, drillAgent, setDrillAgent }) {
+  const [start, setStart] = useState(daysAgo(6));
+  const [end, setEnd] = useState(todayStr());
+
+  const rows = agents.map((a) => {
+    const list = transactions.filter((t) => t.agentId === a.id && t.date >= start && t.date <= end);
+    const inSum = list.reduce((s, t) => s + Number(t.inAmount), 0);
+    const outSum = list.reduce((s, t) => s + Number(t.outAmount), 0);
+    const focSum = list.reduce((s, t) => s + Number(t.foc), 0);
+    const net = list.reduce((s, t) => s + netOf(t), 0);
+    const lastTx = [...list].sort((x, y) => (x.date + x.time > y.date + y.time ? -1 : 1))[0];
+    return {
+      agent: a, count: list.length, players: new Set(list.map((t) => t.playerId)).size,
+      inSum, outSum, focSum, net, lastAt: lastTx ? `${lastTx.date} ${lastTx.time}` : "-",
+    };
+  });
+
+  if (drillAgent) {
+    const row = rows.find((r) => r.agent.id === drillAgent);
+    const agentPlayers = players.filter((p) => p.agentId === drillAgent);
+    const agentTx = transactions.filter((t) => t.agentId === drillAgent && t.date >= start && t.date <= end);
+    return (
+      <div className="space-y-4">
+        <button onClick={() => setDrillAgent(null)} className="flex items-center gap-1.5 text-sm text-slate-500 font-medium">
+          <ArrowLeft size={15} /> 返回代理报表
+        </button>
+        <h1 className="text-lg font-bold text-slate-800">{row.agent.name} 的明细</h1>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <StatCard label="玩家数量" value={row.players} tone="sky" />
+          <StatCard label="账目数量" value={row.count} tone="slate" />
+          <StatCard label="FOC" value={fmt(row.focSum)} tone="orange" />
+          <StatCard label="净输赢" value={(row.net >= 0 ? "+" : "") + fmt(row.net)} tone={row.net >= 0 ? "green" : "red"} />
+        </div>
+
+        <div className="bg-white rounded-2xl border border-slate-100 overflow-hidden">
+          <div className="px-4 py-3 border-b border-slate-100 font-semibold text-sm">名下玩家</div>
+          <div className="divide-y divide-slate-100">
+            {agentPlayers.map((p) => {
+              const list = agentTx.filter((t) => t.playerId === p.id);
+              const net = list.reduce((s, t) => s + netOf(t), 0);
+              return (
+                <div key={p.id} className="flex items-center justify-between px-4 py-3 text-sm">
+                  <span>{p.name}（{list.length} 笔）</span>
+                  <NetAmount value={net} size="sm" />
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="bg-white rounded-2xl border border-slate-100 overflow-hidden">
+          <div className="px-4 py-3 border-b border-slate-100 font-semibold text-sm">全部流水</div>
+          <div className="divide-y divide-slate-100 max-h-80 overflow-y-auto">
+            {agentTx.sort((a, b) => (a.date + a.time < b.date + b.time ? 1 : -1)).map((t) => (
+              <div key={t.id} className="flex items-center justify-between px-4 py-3 text-sm">
+                <span className="text-slate-500">{t.date} {t.time} · {players.find((p) => p.id === t.playerId)?.name}</span>
+                <NetAmount value={netOf(t)} size="sm" />
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <h1 className="text-lg font-bold text-slate-800">代理输赢报表</h1>
+      <div className="bg-white rounded-2xl border border-slate-100 p-4 flex gap-2.5">
+        <input type="date" className={inputCls} value={start} onChange={(e) => setStart(e.target.value)} />
+        <input type="date" className={inputCls} value={end} onChange={(e) => setEnd(e.target.value)} />
+      </div>
+      <div className="grid gap-3">
+        {rows.map((row) => (
+          <button
+            key={row.agent.id}
+            onClick={() => setDrillAgent(row.agent.id)}
+            className="bg-white rounded-2xl border border-slate-100 p-4 flex items-center justify-between text-left hover:border-emerald-300"
+          >
+            <div>
+              <div className="font-semibold text-slate-800">{row.agent.name}</div>
+              <div className="text-xs text-slate-400 mt-0.5">{row.players} 位玩家 · {row.count} 笔账目 · 最后录入 {row.lastAt}</div>
+              <div className="flex gap-3 mt-1.5 text-xs text-slate-500">
+                <span>进款 {fmt(row.inSum)}</span><span>赢款 {fmt(row.outSum)}</span><span className="text-orange-600">FOC {fmt(row.focSum)}</span>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <NetAmount value={row.net} />
+              <ChevronRight size={16} className="text-slate-300" />
+            </div>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// 老板开销
+// ---------------------------------------------------------------------------
+function Expenses({ expenses, setExpenses, flash }) {
+  const [start, setStart] = useState(daysAgo(6));
+  const [end, setEnd] = useState(todayStr());
+  const [category, setCategory] = useState("");
+  const [showAdd, setShowAdd] = useState(false);
+
+  const list = expenses.filter((e) => {
+    if (e.date < start || e.date > end) return false;
+    if (category && e.category !== category) return false;
+    return true;
+  }).sort((a, b) => (a.date < b.date ? 1 : -1));
+
+  const total = list.reduce((s, e) => s + Number(e.amount), 0);
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <h1 className="text-lg font-bold text-slate-800">老板开销</h1>
+        <button onClick={() => setShowAdd(true)} className="text-xs font-semibold bg-emerald-600 text-white px-3.5 py-2 rounded-lg flex items-center gap-1.5">
+          <PlusCircle size={14} /> 新增开销
+        </button>
+      </div>
+
+      <div className="bg-white rounded-2xl border border-slate-100 p-4 grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+        <input type="date" className={inputCls} value={start} onChange={(e) => setStart(e.target.value)} />
+        <input type="date" className={inputCls} value={end} onChange={(e) => setEnd(e.target.value)} />
+        <select className={inputCls + " col-span-2 sm:col-span-1"} value={category} onChange={(e) => setCategory(e.target.value)}>
+          <option value="">全部类型</option>
+          {EXPENSE_CATEGORIES.map((c) => <option key={c}>{c}</option>)}
+        </select>
+        <div className="flex items-center justify-center bg-orange-50 rounded-xl text-orange-700 font-mono font-bold text-sm">
+          总额 {fmt(total)}
+        </div>
+      </div>
+
+      <div className="bg-white rounded-2xl border border-slate-100 overflow-x-auto">
+        <table className="w-full text-sm min-w-[600px]">
+          <thead>
+            <tr className="text-left text-xs text-slate-400 border-b border-slate-100">
+              <th className="px-4 py-3 font-medium">日期</th>
+              <th className="px-4 py-3 font-medium">类型</th>
+              <th className="px-4 py-3 font-medium">项目</th>
+              <th className="px-4 py-3 font-medium">收款人</th>
+              <th className="px-4 py-3 font-medium">金额</th>
+              <th className="px-4 py-3 font-medium">操作</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-50">
+            {list.map((e) => (
+              <tr key={e.id} className="hover:bg-slate-50/60">
+                <td className="px-4 py-3 text-slate-500">{e.date}</td>
+                <td className="px-4 py-3"><Badge tone="amber">{e.category}</Badge></td>
+                <td className="px-4 py-3">{e.item}</td>
+                <td className="px-4 py-3 text-slate-500">{e.payee}</td>
+                <td className="px-4 py-3 font-mono font-semibold text-orange-600">{fmt(e.amount)}</td>
+                <td className="px-4 py-3">
+                  <button
+                    onClick={() => { setExpenses((l) => l.filter((x) => x.id !== e.id)); flash("已删除该开销"); }}
+                    className="p-1.5 rounded-lg bg-red-50 text-red-500 hover:bg-red-100"
+                  ><Trash2 size={13} /></button>
+                </td>
+              </tr>
+            ))}
+            {list.length === 0 && <tr><td colSpan={6} className="px-4 py-10 text-center text-slate-400">没有符合条件的开销记录</td></tr>}
+          </tbody>
+        </table>
+      </div>
+
+      {showAdd && (
+        <ExpenseFormModal
+          onClose={() => setShowAdd(false)}
+          onSave={(e) => { setExpenses((l) => [{ ...e, id: uid("E"), createdBy: "老板", createdAt: `${e.date} ${nowTime()}` }, ...l]); setShowAdd(false); flash("开销已记录"); }}
+        />
+      )}
+    </div>
+  );
+}
+
+function ExpenseFormModal({ onClose, onSave }) {
+  const [form, setForm] = useState({ date: todayStr(), category: EXPENSE_CATEGORIES[0], item: "", payee: "", paymentMethod: PAYMENT_METHODS[0], amount: 0, remark: "" });
+  const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+  return (
+    <Modal title="新增开销" onClose={onClose}>
+      <Field label="日期"><input type="date" className={inputCls} value={form.date} onChange={(e) => set("date", e.target.value)} /></Field>
+      <Field label="开销类型">
+        <select className={inputCls} value={form.category} onChange={(e) => set("category", e.target.value)}>
+          {EXPENSE_CATEGORIES.map((c) => <option key={c}>{c}</option>)}
+        </select>
+      </Field>
+      <Field label="开销项目"><input className={inputCls} value={form.item} onChange={(e) => set("item", e.target.value)} /></Field>
+      <Field label="收款人 / 商家"><input className={inputCls} value={form.payee} onChange={(e) => set("payee", e.target.value)} /></Field>
+      <Field label="金额"><input type="number" inputMode="decimal" className={inputCls} value={form.amount} onChange={(e) => set("amount", e.target.value)} /></Field>
+      <button onClick={() => { if (!form.item) return; onSave(form); }} className="w-full bg-emerald-600 text-white font-semibold py-3 rounded-xl text-sm mt-1">保存</button>
+    </Modal>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// 代理查看权限
+// ---------------------------------------------------------------------------
+function Permissions({ agents, players, setPlayers, transactions, setTransactions, flash }) {
+  const [agentId, setAgentId] = useState(agents[0]?.id || "");
+  const agentPlayers = players.filter((p) => p.agentId === agentId);
+  const agentTx = transactions.filter((t) => t.agentId === agentId).sort((a, b) => (a.date < b.date ? 1 : -1)).slice(0, 15);
+
+  const togglePlayer = (id) => {
+    setPlayers((list) => list.map((p) => (p.id === id ? { ...p, agentVisible: !p.agentVisible } : p)));
+    flash("权限已更新，代理端会立即生效");
+  };
+  const toggleTx = (id) => {
+    setTransactions((list) => list.map((t) => (t.id === id ? { ...t, agentVisible: !t.agentVisible } : t)));
+    flash("权限已更新，代理端会立即生效");
+  };
+
+  return (
+    <div className="space-y-4">
+      <h1 className="text-lg font-bold text-slate-800">代理查看权限</h1>
+      <div className="bg-white rounded-2xl border border-slate-100 p-4">
+        <Field label="选择代理">
+          <select className={inputCls} value={agentId} onChange={(e) => setAgentId(e.target.value)}>
+            {agents.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+          </select>
+        </Field>
+      </div>
+
+      <div className="bg-white rounded-2xl border border-slate-100 overflow-hidden">
+        <div className="px-4 py-3 border-b border-slate-100 font-semibold text-sm text-slate-700">玩家权限（关闭后代理看不到该玩家）</div>
+        <div className="divide-y divide-slate-100">
+          {agentPlayers.map((p) => (
+            <div key={p.id} className="flex items-center justify-between px-4 py-3">
+              <div>
+                <div className="text-sm font-medium text-slate-800">{p.name}</div>
+                <div className="text-xs text-slate-400">{p.code}</div>
+              </div>
+              <button
+                onClick={() => togglePlayer(p.id)}
+                className={`flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full ${p.agentVisible ? "bg-green-50 text-green-700" : "bg-slate-100 text-slate-400"}`}
+              >
+                {p.agentVisible ? <Eye size={13} /> : <EyeOff size={13} />}
+                {p.agentVisible ? "可查看" : "已隐藏"}
+              </button>
+            </div>
+          ))}
+          {agentPlayers.length === 0 && <div className="px-4 py-6 text-center text-sm text-slate-400">该代理暂无玩家</div>}
+        </div>
+      </div>
+
+      <div className="bg-white rounded-2xl border border-slate-100 overflow-hidden">
+        <div className="px-4 py-3 border-b border-slate-100 font-semibold text-sm text-slate-700">账目权限（最近 15 笔）</div>
+        <div className="divide-y divide-slate-100 max-h-80 overflow-y-auto">
+          {agentTx.map((t) => (
+            <div key={t.id} className="flex items-center justify-between px-4 py-3">
+              <div className="text-sm text-slate-600">{t.date} {t.time} · {players.find((p) => p.id === t.playerId)?.name}</div>
+              <button
+                onClick={() => toggleTx(t.id)}
+                className={`flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full ${t.agentVisible ? "bg-green-50 text-green-700" : "bg-slate-100 text-slate-400"}`}
+              >
+                {t.agentVisible ? <Eye size={13} /> : <EyeOff size={13} />}
+                {t.agentVisible ? "可查看" : "已隐藏"}
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>
