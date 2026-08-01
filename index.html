@@ -24,10 +24,7 @@ const { useState, useMemo, useEffect, useRef } = React;
 function makeIcon(glyph) {
   return function IconComp({ size = 16, className = "", style = {} }) {
     return (
-      <span
-        className={className}
-        style={{ fontSize: size, lineHeight: 1, display: "inline-block", ...style }}
-      >
+      <span className={className} style={{ fontSize: size, lineHeight: 1, display: "inline-block", ...style }}>
         {glyph}
       </span>
     );
@@ -285,6 +282,7 @@ function App() {
   const [players, setPlayers] = useState(SEED_PLAYERS);
   const [transactions, setTransactions] = useState(seedTransactions);
   const [expenses, setExpenses] = useState(seedExpenses);
+  const [expenseCategories, setExpenseCategories] = useState(EXPENSE_CATEGORIES);
 
   const [user, setUser] = useState(null); // { role, agentId, name }
   const [view, setView] = useState("dashboard");
@@ -336,6 +334,7 @@ function App() {
   const ctx = {
     agents, players, transactions, expenses,
     setAgents, setPlayers, setTransactions, setExpenses,
+    expenseCategories, setExpenseCategories,
     user, flash, netOf, visiblePlayers, visibleTransactions,
     setView, drillAgent, setDrillAgent,
   };
@@ -1261,7 +1260,7 @@ function AgentReport({ agents, players, transactions, netOf, drillAgent, setDril
 // ---------------------------------------------------------------------------
 // 老板开销
 // ---------------------------------------------------------------------------
-function Expenses({ expenses, setExpenses, flash }) {
+function Expenses({ expenses, setExpenses, expenseCategories, setExpenseCategories, flash }) {
   const [start, setStart] = useState(daysAgo(6));
   const [end, setEnd] = useState(todayStr());
   const [category, setCategory] = useState("");
@@ -1289,7 +1288,7 @@ function Expenses({ expenses, setExpenses, flash }) {
         <input type="date" className={inputCls} value={end} onChange={(e) => setEnd(e.target.value)} />
         <select className={inputCls + " col-span-2 sm:col-span-1"} value={category} onChange={(e) => setCategory(e.target.value)}>
           <option value="">全部类型</option>
-          {EXPENSE_CATEGORIES.map((c) => <option key={c}>{c}</option>)}
+          {expenseCategories.map((c) => <option key={c}>{c}</option>)}
         </select>
         <div className="flex items-center justify-center bg-orange-50 rounded-xl text-orange-700 font-mono font-bold text-sm">
           总额 {fmt(total)}
@@ -1331,6 +1330,8 @@ function Expenses({ expenses, setExpenses, flash }) {
 
       {showAdd && (
         <ExpenseFormModal
+          expenseCategories={expenseCategories}
+          setExpenseCategories={setExpenseCategories}
           onClose={() => setShowAdd(false)}
           onSave={(e) => { setExpenses((l) => [{ ...e, id: uid("E"), createdBy: "老板", createdAt: `${e.date} ${nowTime()}` }, ...l]); setShowAdd(false); flash("开销已记录"); }}
         />
@@ -1339,16 +1340,53 @@ function Expenses({ expenses, setExpenses, flash }) {
   );
 }
 
-function ExpenseFormModal({ onClose, onSave }) {
-  const [form, setForm] = useState({ date: todayStr(), category: EXPENSE_CATEGORIES[0], item: "", payee: "", paymentMethod: PAYMENT_METHODS[0], amount: 0, remark: "" });
+function ExpenseFormModal({ expenseCategories, setExpenseCategories, onClose, onSave }) {
+  const [form, setForm] = useState({ date: todayStr(), category: expenseCategories[0], item: "", payee: "", paymentMethod: PAYMENT_METHODS[0], amount: 0, remark: "" });
+  const [addingNew, setAddingNew] = useState(false);
+  const [newCategory, setNewCategory] = useState("");
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+
+  const confirmNewCategory = () => {
+    const name = newCategory.trim();
+    if (!name) return;
+    if (!expenseCategories.includes(name)) {
+      setExpenseCategories((list) => [...list, name]);
+    }
+    set("category", name);
+    setNewCategory("");
+    setAddingNew(false);
+  };
+
   return (
     <Modal title="新增开销" onClose={onClose}>
       <Field label="日期"><input type="date" className={inputCls} value={form.date} onChange={(e) => set("date", e.target.value)} /></Field>
       <Field label="开销类型">
-        <select className={inputCls} value={form.category} onChange={(e) => set("category", e.target.value)}>
-          {EXPENSE_CATEGORIES.map((c) => <option key={c}>{c}</option>)}
-        </select>
+        {addingNew ? (
+          <div className="flex gap-2">
+            <input
+              autoFocus
+              className={inputCls}
+              value={newCategory}
+              onChange={(e) => setNewCategory(e.target.value)}
+              placeholder="输入新类型名称"
+              onKeyDown={(e) => e.key === "Enter" && confirmNewCategory()}
+            />
+            <button onClick={confirmNewCategory} className="px-3 rounded-xl bg-emerald-600 text-white text-sm font-semibold shrink-0">确定</button>
+            <button onClick={() => { setAddingNew(false); setNewCategory(""); }} className="px-3 rounded-xl bg-slate-100 text-slate-500 text-sm shrink-0">取消</button>
+          </div>
+        ) : (
+          <select
+            className={inputCls}
+            value={form.category}
+            onChange={(e) => {
+              if (e.target.value === "__add_new__") { setAddingNew(true); return; }
+              set("category", e.target.value);
+            }}
+          >
+            {expenseCategories.map((c) => <option key={c}>{c}</option>)}
+            <option value="__add_new__">＋ 新增类型…</option>
+          </select>
+        )}
       </Field>
       <Field label="开销项目"><input className={inputCls} value={form.item} onChange={(e) => set("item", e.target.value)} /></Field>
       <Field label="收款人 / 商家"><input className={inputCls} value={form.payee} onChange={(e) => set("payee", e.target.value)} /></Field>
