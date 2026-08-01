@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+<title>WEMS 使用说明</title>
+<style>
+  :root {
+    --ink: #1b2430;
+    --muted: #64748b;
+    --accent: #0e7c66;
+    --accent-soft: #e4f2ee;
+    --border: #e5e7eb;
+    --bg: #f8fafc;
+    --green: #16a34a;
+    --red: #dc2626;
+    --orange: #ea580c;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  header {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background: var(--ink);
+    color: white;
+    padding: 18px 20px;
+    text-align: center;
+  }
+  header .brand {
+    font-family: "SF Mono", "Courier New", monospace;
+    font-weight: 800;
+    font-size: 22px;
+    letter-spacing: 0.5px;
+    color: #6ee7b7;
+  }
+  header .sub {
+    font-size: 13px;
+    color: #94a3b8;
+    margin-top: 2px;
+  }
+  .url-box {
+    margin: 16px;
+    padding: 14px 16px;
+    background: var(--accent-soft);
+    border: 1px solid #bfe3d8;
+    border-radius: 14px;
+    font-size: 13px;
+    word-break: break-all;
+  }
+  .url-box a {
+    color: var(--accent);
+    font-weight: 700;
+    text-decoration: none;
+  }
+  main {
+    max-width: 640px;
+    margin: 0 auto;
+    padding: 4px 16px 40px;
+  }
+  details {
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    margin-bottom: 12px;
+    overflow: hidden;
+  }
+  summary {
+    padding: 16px 18px;
+    font-weight: 700;
+    font-size: 16px;
+    cursor: pointer;
+    list-style: none;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  summary::-webkit-details-marker { display: none; }
+  summary::after {
+    content: "+";
+    font-size: 20px;
+    color: var(--accent);
+    font-weight: 400;
+    margin-left: 12px;
+    flex-shrink: 0;
+  }
+  details[open] summary::after { content: "−"; }
+  .content {
+    padding: 0 18px 18px;
+    font-size: 14.5px;
+    color: #334155;
+  }
+  .content p { margin: 8px 0; }
+  .content ul, .content ol { margin: 8px 0; padding-left: 20px; }
+  .content li { margin: 4px 0; }
+  .tag {
+    display: inline-block;
+    padding: 2px 9px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 600;
+  }
+  .tag.boss { background: #dbeafe; color: #1d4ed8; }
+  .tag.agent { background: #fef3c7; color: #92400e; }
+  .formula {
+    background: #f1f5f9;
+    border-left: 3px solid var(--accent);
+    padding: 10px 14px;
+    border-radius: 8px;
+    font-size: 13.5px;
+    margin: 10px 0;
+  }
+  .g { color: var(--green); font-weight: 700; }
+  .r { color: var(--red); font-weight: 700; }
+  .o { color: var(--orange); font-weight: 700; }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+    margin: 8px 0;
+  }
+  th, td {
+    border: 1px solid var(--border);
+    padding: 7px 8px;
+    text-align: center;
+  }
+  th { background: #f8fafc; }
+  .qa {
+    background: #fff7ed;
+    border: 1px solid #fed7aa;
+    border-radius: 12px;
+    padding: 12px 14px;
+    margin: 10px 0;
+    font-size: 13.5px;
+  }
+  .qa b { display: block; margin-bottom: 4px; color: #9a3412; }
+  .footer-note {
+    text-align: center;
+    font-size: 12px;
+    color: var(--muted);
+    padding: 20px 20px 40px;
+  }
+  .toc {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 4px 16px 16px;
+  }
+  .toc a {
+    font-size: 12.5px;
+    background: white;
+    border: 1px solid var(--border);
+    color: var(--ink);
+    padding: 6px 11px;
+    border-radius: 999px;
+    text-decoration: none;
+    font-weight: 600;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">WEMS</div>
+  <div class="sub">代理输赢报表系统 · 使用说明</div>
+</header>
+
+<div class="url-box">
+  📱 网址（手机电脑都能打开）：<br/>
+  <a href="https://ssslem89-creator.github.io/wems-agent-report-prototype/">ssslem89-creator.github.io/wems-agent-report-prototype</a>
+</div>
+
+<div class="toc">
+  <a href="#login">登录</a>
+  <a href="#dashboard">总览</a>
+  <a href="#entry">记一笔</a>
+  <a href="#tx">流水</a>
+  <a href="#players">玩家</a>
+  <a href="#report">代理报表</a>
+  <a href="#agents">代理管理</a>
+  <a href="#expenses">开销</a>
+  <a href="#perm">权限</a>
+  <a href="#settings">改密码</a>
+  <a href="#faq">常见问题</a>
+</div>
+
+<main>
+
+<details id="login" open>
+  <summary>① 登录</summary>
+  <div class="content">
+    <p>打开网址，输入<b>登录账号</b>和<b>密码</b>，点"登录"。</p>
+    <ul>
+      <li><span class="tag boss">老板</span> 账号：<code>Admin888</code>（密码可在"设置"页自己改）</li>
+      <li><span class="tag agent">代理</span> 账号由老板在"代理管理"新增</li>
+    </ul>
+    <table>
+      <tr><th>菜单</th><th>老板</th><th>代理</th></tr>
+      <tr><td>总览</td><td class="g">✓</td><td class="g">✓</td></tr>
+      <tr><td>记一笔</td><td class="g">✓</td><td class="g">✓</td></tr>
+      <tr><td>流水</td><td class="g">✓</td><td class="g">只看自己</td></tr>
+      <tr><td>玩家</td><td class="g">✓</td><td class="g">只看自己</td></tr>
+      <tr><td>代理报表</td><td class="g">✓</td><td class="r">✕</td></tr>
+      <tr><td>代理管理</td><td class="g">✓</td><td class="r">✕</td></tr>
+      <tr><td>开销</td><td class="g">✓</td><td class="r">✕</td></tr>
+      <tr><td>权限</td><td class="g">✓</td><td class="r">✕</td></tr>
+      <tr><td>设置</td><td class="g">✓</td><td class="g">✓</td></tr>
+    </table>
+  </div>
+</details>
+
+<details id="dashboard">
+  <summary>② 每日总览</summary>
+  <div class="content">
+    <p>登录后的首页，一眼看清今天：进款、赢款、FOC、净输赢、玩家/账目数量、老板开销、代理佣金。</p>
+    <div class="formula">公司净结果 = 净输赢 − 代理佣金 − 老板开销</div>
+    <p><span class="g">绿色</span> = 公司赢，<span class="r">红色</span> = 公司输，<span class="o">橙色</span> = FOC/开销</p>
+    <p>右上角可选日期查看任意一天；下面有各代理今日汇总、7天趋势图、最近账目。</p>
+    <p>顶部快捷按钮：快速记一笔 / 新增玩家 / 查看流水 / 代理输赢 / 记录开销。</p>
+  </div>
+</details>
+
+<details id="entry">
+  <summary>③ 记一笔（录入账目）</summary>
+  <div class="content">
+    <ol>
+      <li>日期时间默认现在，一般不用改</li>
+      <li>代理：老板可选任何人，代理自动锁定自己</li>
+      <li>点"玩家"框可以<b>搜索</b>姓名/编号/电话</li>
+      <li>填 IN / OUT / FOC，页面实时算出净输赢</li>
+      <li>选付款方式，老板可勾选是否让代理看到这笔</li>
+      <li>保存，或"保存并继续下一笔"连续录入</li>
+    </ol>
+  </div>
+</details>
+
+<details id="tx">
+  <summary>④ 流水查询</summary>
+  <div class="content">
+    <p>按日期、代理、关键词筛选；顶部显示筛选范围的合计。</p>
+    <p>每笔可<b>修改</b>或<b>删除</b>（删除有二次确认）；右上角可导出 CSV。</p>
+  </div>
+</details>
+
+<details id="players">
+  <summary>⑤ 玩家资料管理</summary>
+  <div class="content">
+    <p>新增/编辑玩家：姓名、电话、所属代理、银行资料、状态（正常/暂停/黑名单/已关闭）、备注。</p>
+    <p>可按代理筛选、按姓名/电话/银行搜索；点"查看流水"看该玩家全部历史和累计输赢。</p>
+  </div>
+</details>
+
+<details id="report">
+  <summary>⑥ 代理输赢报表（老板专用）</summary>
+  <div class="content">
+    <p>选日期范围，看每个代理的玩家数、账目数、进/赢/FOC、净输赢、佣金、老板实收。</p>
+    <p>点代理可下钻看名下每个玩家的输赢和全部流水。</p>
+  </div>
+</details>
+
+<details id="agents">
+  <summary>⑦ 代理管理（老板专用）</summary>
+  <div class="content">
+    <p><b>新增代理：</b>姓名、登录账号、电话、佣金比例(%)、密码 —— 真的会在数据库建一个可登录账号。</p>
+    <p><b>编辑代理：</b>姓名、电话、状态、备注、佣金比例。</p>
+    <div class="formula">老板实收 = 净输赢 − (净输赢 × 佣金比例%)<br/>例：佣金 20%，净输赢 RM10,000 → 佣金 RM2,000，老板实收 RM8,000</div>
+    <p><b>删除代理：</b>名下还有玩家或账目时不能删，要先转移或清空。</p>
+  </div>
+</details>
+
+<details id="expenses">
+  <summary>⑧ 老板开销</summary>
+  <div class="content">
+    <p>新增开销：日期、类型、<b>归属</b>（老板自己 / 某代理线）、项目、收款人、金额。</p>
+    <p>类型下拉最下面有"＋ 新增类型…"，可以自己加分类。</p>
+    <p>可按日期、类型、归属筛选。</p>
+  </div>
+</details>
+
+<details id="perm">
+  <summary>⑨ 代理查看权限</summary>
+  <div class="content">
+    <p>选一个代理，逐个打开/关闭他名下<b>玩家</b>和<b>账目</b>是否让他看到。</p>
+    <p>关掉后代理登录会立刻看不到被隐藏的内容。</p>
+  </div>
+</details>
+
+<details id="settings">
+  <summary>⑩ 设置（改密码）</summary>
+  <div class="content">
+    <p>所有人登录后都能进"设置"改自己的密码（至少 6 位，两次输入一致），改完立即生效。</p>
+  </div>
+</details>
+
+<details id="faq">
+  <summary>⑪ 常见问题</summary>
+  <div class="content">
+    <div class="qa">
+      <b>改了东西还是看到旧版本？</b>
+      浏览器缓存了旧版本，按 Ctrl+Shift+R 强制刷新，或关掉分页重开。
+    </div>
+    <div class="qa">
+      <b>账号密码没打错却登不进？</b>
+      数据库可能临时休眠，等 1-2 分钟再试，或联系我处理。
+    </div>
+    <div class="qa">
+      <b>数据存在哪里？</b>
+      独立的 Supabase 项目 <code>wems-system</code>，跟公司其他系统完全分开。
+    </div>
+    <div class="qa">
+      <b>网址会变吗？</b>
+      不会，GitHub Pages 固定网址，以后更新都在同一个网址生效。
+    </div>
+  </div>
+</details>
+
+</main>
+
+<div class="footer-note">
+  本说明对应原型 Demo 阶段；玩家/流水/开销数据目前存在浏览器内存，刷新会重置——后续会接上正式数据库存储。
+</div>
+
+</body>
+</html>
