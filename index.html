@@ -1426,6 +1426,7 @@ function ExpenseFormModal({ expenseCategories, setExpenseCategories, onClose, on
 function AgentManagement({ agents, setAgents, transactions, players, user, flash, netOf }) {
   const [showAdd, setShowAdd] = useState(false);
   const [editing, setEditing] = useState(null);
+  const [confirmDelete, setConfirmDelete] = useState(null);
 
   const agentName = (id) => agents.find((a) => a.id === id)?.name || "-";
 
@@ -1459,12 +1460,20 @@ function AgentManagement({ agents, setAgents, transactions, players, user, flash
                 <div className="text-xs text-slate-400">{players_.length} 位玩家 · {txs.length} 笔账目</div>
                 <NetAmount value={net} size="sm" />
               </div>
-              <button
-                onClick={() => setEditing(a)}
-                className="w-full mt-3 text-xs font-medium bg-slate-50 text-slate-600 py-2 rounded-lg flex items-center justify-center gap-1"
-              >
-                <Edit2 size={13} /> 编辑资料
-              </button>
+              <div className="flex gap-2 mt-3">
+                <button
+                  onClick={() => setEditing(a)}
+                  className="flex-1 text-xs font-medium bg-slate-50 text-slate-600 py-2 rounded-lg flex items-center justify-center gap-1"
+                >
+                  <Edit2 size={13} /> 编辑资料
+                </button>
+                <button
+                  onClick={() => setConfirmDelete(a)}
+                  className="text-xs font-medium bg-red-50 text-red-500 px-3 py-2 rounded-lg flex items-center justify-center gap-1"
+                >
+                  <Trash2 size={13} />
+                </button>
+              </div>
             </div>
           );
         })}
@@ -1494,6 +1503,43 @@ function AgentManagement({ agents, setAgents, transactions, players, user, flash
           }}
         />
       )}
+
+      {confirmDelete && (() => {
+        const players_ = players.filter((p) => p.agentId === confirmDelete.id);
+        const txs = transactions.filter((t) => t.agentId === confirmDelete.id);
+        const blocked = players_.length > 0 || txs.length > 0;
+        return (
+          <Modal title="删除代理" onClose={() => setConfirmDelete(null)}>
+            {blocked ? (
+              <div>
+                <p className="text-sm text-slate-600 mb-4">
+                  <b>{confirmDelete.name}</b> 名下还有 {players_.length} 位玩家、{txs.length} 笔账目，不能直接删除。请先把玩家转给其他代理，或删除相关账目后再试。
+                </p>
+                <button onClick={() => setConfirmDelete(null)} className="w-full bg-slate-100 text-slate-700 font-semibold py-2.5 rounded-xl text-sm">知道了</button>
+              </div>
+            ) : (
+              <div>
+                <p className="text-sm text-slate-600 mb-5">
+                  确定要删除代理 <b>{confirmDelete.name}</b> 吗？这只会移除页面上的资料，登录账号需要另外去 Supabase 后台停用。
+                </p>
+                <div className="grid grid-cols-2 gap-2.5">
+                  <button onClick={() => setConfirmDelete(null)} className="bg-slate-100 text-slate-700 font-semibold py-2.5 rounded-xl text-sm">取消</button>
+                  <button
+                    onClick={() => {
+                      setAgents((list) => list.filter((a) => a.id !== confirmDelete.id));
+                      setConfirmDelete(null);
+                      flash("代理已删除");
+                    }}
+                    className="bg-red-500 text-white font-semibold py-2.5 rounded-xl text-sm"
+                  >
+                    确认删除
+                  </button>
+                </div>
+              </div>
+            )}
+          </Modal>
+        );
+      })()}
     </div>
   );
 }
